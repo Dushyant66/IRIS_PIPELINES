@@ -4,5 +4,7 @@ scikit-learn
 pandas
 numpy
 joblib
-flask
+flask==3.1.1
+
+
 
