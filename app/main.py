@@ -1,10 +1,13 @@
 from flask import Flask, request, jsonify
 import pickle
 import numpy as np
+import os
 
 app = Flask(__name__)
 
-with open("app/model.pkl", "rb") as f:
+# Use correct path for model inside Docker container
+model_path = os.path.join(os.path.dirname(__file__), "model.pkl")
+with open(model_path, "rb") as f:
     model = pickle.load(f)
 
 @app.route("/predict", methods=["POST"])
@@ -20,3 +23,4 @@ def home():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
