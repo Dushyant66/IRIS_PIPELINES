@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iris-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iris
+  template:
+    metadata:
+      labels:
+        app: iris
+    spec:
+      containers:
+        - name: iris-container
+          image: us-central1-docker.pkg.dev/steadfast-canto-473315-v8/iris-repo/iris-app:latest
+          ports:
+            - containerPort: 8080
