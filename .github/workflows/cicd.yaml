@@ -56,21 +56,39 @@ jobs:
 
     - name: Stress Test using wrk
       run: |
-        sudo apt-get update && sudo apt-get install -y wrk
+        sudo apt-get update && sudo apt-get install -y wrk curl
 
         echo "⏳ Waiting for LoadBalancer external IP..."
-        for i in {1..20}; do
+        for i in {1..30}; do
           EXTERNAL_IP=$(kubectl get svc iris-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
           if [ -n "$EXTERNAL_IP" ]; then
-            echo "✅ Service available at: http://$EXTERNAL_IP/"
+            echo "✅ Found External IP: http://$EXTERNAL_IP/"
             break
           fi
-          echo "Still waiting... ($i/20)"
+          echo "Still waiting... ($i/30)"
           sleep 10
         done
 
         if [ -z "$EXTERNAL_IP" ]; then
-          echo "❌ ERROR: LoadBalancer IP not found after waiting. Exiting."
+          echo "❌ ERROR: No external IP found after waiting."
+          kubectl describe svc iris-service
+          exit 1
+        fi
+
+        echo "🩺 Checking if service is reachable..."
+        for i in {1..20}; do
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$EXTERNAL_IP/)
+          if [ "$STATUS" -eq 200 ]; then
+            echo "✅ Service is ready (HTTP 200)"
+            break
+          fi
+          echo "Waiting for app to become ready... ($i/20)"
+          sleep 10
+        done
+
+        if [ "$STATUS" -ne 200 ]; then
+          echo "❌ ERROR: Service not responding after waiting."
+          kubectl get pods -o wide
           exit 1
         fi
 
