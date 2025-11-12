@@ -22,21 +22,25 @@ jobs:
       with:
         project_id: steadfast-canto-473315-v8
 
-    - name: Configure Docker
+    - name: Configure Docker for Artifact Registry
       run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
     - name: Build Docker image
-      run: docker build -t us-central1-docker.pkg.dev/steadfast-canto-473315-v8/iris-repo/iris-app:latest .
+      run: |
+        docker build -t us-central1-docker.pkg.dev/steadfast-canto-473315-v8/iris-repo/iris-app:latest .
 
     - name: Push Docker image
-      run: docker push us-central1-docker.pkg.dev/steadfast-canto-473315-v8/iris-repo/iris-app:latest
+      run: |
+        echo "Pushing Docker image to Artifact Registry..."
+        docker push us-central1-docker.pkg.dev/steadfast-canto-473315-v8/iris-repo/iris-app:latest
 
     - name: Get GKE credentials
-      run: gcloud container clusters get-credentials iris-cluster --zone us-central1-a --project steadfast-canto-473315-v8
+      run: |
+        gcloud container clusters get-credentials iris-cluster --zone us-central1-a --project steadfast-canto-473315-v8
 
     - name: Install GKE Auth Plugin
       run: |
-        echo "Adding Google Cloud SDK repository..."
+        echo "Installing GKE authentication plugin..."
         sudo apt-get update && sudo apt-get install -y apt-transport-https ca-certificates gnupg
         echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
         curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
@@ -45,6 +49,7 @@ jobs:
 
     - name: Deploy to GKE
       run: |
+        echo "Deploying Kubernetes resources..."
         kubectl apply -f k8s/deployment.yaml
         kubectl apply -f k8s/service.yaml
         kubectl apply -f k8s/autoscale.yaml
@@ -52,6 +57,22 @@ jobs:
     - name: Stress Test using wrk
       run: |
         sudo apt-get update && sudo apt-get install -y wrk
-        EXTERNAL_IP=$(kubectl get svc iris-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        echo "Testing endpoint: http://$EXTERNAL_IP/"
+
+        echo "⏳ Waiting for LoadBalancer external IP..."
+        for i in {1..20}; do
+          EXTERNAL_IP=$(kubectl get svc iris-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          if [ -n "$EXTERNAL_IP" ]; then
+            echo "✅ Service available at: http://$EXTERNAL_IP/"
+            break
+          fi
+          echo "Still waiting... ($i/20)"
+          sleep 10
+        done
+
+        if [ -z "$EXTERNAL_IP" ]; then
+          echo "❌ ERROR: LoadBalancer IP not found after waiting. Exiting."
+          exit 1
+        fi
+
+        echo "🚀 Running stress test on http://$EXTERNAL_IP/"
         wrk -t4 -c1000 -d30s http://$EXTERNAL_IP/
